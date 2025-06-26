@@ -1,0 +1,12 @@
+# llm_service/requirements.txt
+fastapi
+uvicorn[standard]
+gunicorn
+tritonclient[grpc,http]
+transformers
+torch 
+# Required by transformers, ensure it matches your environment
+sentencepiece
+pydantic-settings
+loguru
+numpy
