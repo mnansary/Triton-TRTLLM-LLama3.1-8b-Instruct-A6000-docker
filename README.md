@@ -1,6 +1,4 @@
-# Triton-TRTLLM-LLama3.1-8b-Instruct-A6000-docker
-
-**High-Performance Llama 3.1 8B API with 96k Context on Triton**
+# High-Performance Llama 3.1 8B API with 96k Context on Triton**
 
 This repository provides a complete, step-by-step guide to deploying Meta's Llama 3.1 8B Instruct model with a 96,000 token context length. The deployment uses NVIDIA TensorRT-LLM for high-performance inference, served via the Triton Inference Server, and is fronted by a production-grade FastAPI application for easy integration.
 
