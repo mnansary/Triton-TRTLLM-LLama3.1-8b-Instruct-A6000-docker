@@ -166,7 +166,7 @@ Now, run the following commands *inside the container*:
 mkdir -p /workspace && cd /workspace
 git clone https://github.com/NVIDIA/TensorRT-LLM.git
 cd TensorRT-LLM
-git checkout release/0.10.0 # Checkout the tag corresponding to the 25.05 container
+git checkout v0.19.0
 
 # Inside container: Install dependencies
 pip install -r requirements.txt
