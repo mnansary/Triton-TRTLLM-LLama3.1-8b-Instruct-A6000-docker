@@ -321,11 +321,39 @@ pip install -r requirements.txt
 
 ### 7.4 Configure the Service
 
-The API service is configured via the `.env` file in the project root. Open it and ensure the settings match your setup. The defaults should work if you followed this guide exactly.
+The API service is configured via the `.env` file in the project root. Create it -Open it and ensure the settings match your setup. The defaults should work if you followed this guide exactly.
 
 -   `TRITON_URL`: Should be `localhost:8001`.
 -   `MODEL_NAME`: Should be `ensemble`.
 -   `MAX_TOKENS`: The default maximum output length. Can be overridden per-request.
+
+the ```.env``` should look like this
+
+```bash
+# --- LLM Service Environment Variables ---
+# Use this file to override default settings from config.py
+
+# -- Triton Settings --
+TRITON_URL="localhost:8001"
+MODEL_NAME="ensemble"
+DEFAULT_MODEL_ID="meta-llama/Meta-Llama-3.1-8B-Instruct"
+
+# -- Generation Parameters --
+# The default maximum number of tokens for a request.
+MAX_TOKENS=32768
+
+# -- Logging Settings --
+LOG_LEVEL="INFO" # Options: DEBUG, INFO, WARNING, ERROR
+
+# -- Server Settings --
+# Host and port for the FastAPI service
+HOST="0.0.0.0"
+PORT=8000
+
+# Number of worker processes for Gunicorn.
+# Adjust based on your server's CPU cores. (2 * num_cores) + 1 is a good start.
+WORKERS=4
+```
 
 ### 7.5 Run the API Server
 
