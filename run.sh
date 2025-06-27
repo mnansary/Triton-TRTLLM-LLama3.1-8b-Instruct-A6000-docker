@@ -11,11 +11,13 @@ set -e
 mkdir -p logs
 echo "Log directory './logs' ensured."
 
-# Load environment variables from .env file if it exists.
-# This allows for easy configuration without modifying the script.
+# Load environment variables from .env file
 if [ -f .env ]; then
   echo "Loading environment variables from .env file..."
-  export $(grep -v '^#' .env | xargs)
+  # Use `set -a` to automatically export all variables sourced from the file
+  set -a
+  source .env
+  set +a
 fi
 
 # --- Configuration ---
@@ -34,10 +36,10 @@ echo "----------------------------"
 
 # --- Execution ---
 # Run the FastAPI app with Gunicorn and Uvicorn workers.
-# Gunicorn is a battle-tested process manager for Python WSGI applications.
+# Gunicorn is a battle-tested process manager.
 # UvicornWorker allows Gunicorn to run an ASGI application like FastAPI.
-exec gunicorn llm_service.main:app \\
-    --workers ${WORKERS} \\
-    --worker-class uvicorn.workers.UvicornWorker \\
-    --bind ${HOST}:${PORT} \\
+exec gunicorn llm_service.main:app \
+    --workers ${WORKERS} \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --bind ${HOST}:${PORT} \
     --log-level ${LOG_LEVEL,,}

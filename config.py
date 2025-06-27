@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # --- Gunicorn/Uvicorn Production Server Settings ---
     WORKERS: int = 4
     HOST: str = "0.0.0.0"
-    PORT: int = 8000
+    PORT: int = 24434
 
     class Config:
         env_file = ".env"

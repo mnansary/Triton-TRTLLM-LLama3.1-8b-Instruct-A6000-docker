@@ -57,11 +57,12 @@ class TritonInferenceClient:
     async def generate_stream(self, params: GenerationRequest):
         """
         Sends a generation request to Triton and yields the text chunks as they arrive.
+        This function is structured to match the tritonclient's stream_infer API,
+        which requires an async iterator that yields a dictionary of parameters.
         """
-        formatted_prompt = self._format_prompt(params.prompt)
-        logger.debug(f"Request ID {params.request_id}: Sending formatted prompt to Triton.")
-
         try:
+            # First, prepare the list of InferInput objects as before.
+            formatted_prompt = self._format_prompt(params.prompt)
             inputs = [
                 self._create_input("text_input", [[formatted_prompt.encode("utf-8")]], "BYTES"),
                 self._create_input("max_tokens", [[params.max_tokens]], "INT32"),
@@ -71,29 +72,52 @@ class TritonInferenceClient:
                 self._create_input("end_id", [[self.end_id]], "INT32"),
             ]
 
-            async for result in self.client.stream_infer(
-                model_name=settings.MODEL_NAME,
-                inputs=inputs,
-                request_id=params.request_id,
-            ):
-                if result.has_error():
-                    error_message = f"Inference stream error for request {params.request_id}: {result.get_error()}"
-                    logger.error(error_message)
-                    yield f"Error: {error_message}"
-                    break
-                
-                output = result.as_numpy('text_output')
-                if output is not None:
-                    yield output[0].decode('utf-8')
-        
+            # --- START OF DEFINITIVE FIX ---
+            try:
+                # Define the asynchronous iterator that stream_infer expects.
+                async def input_iterator():
+                    yield {
+                        "model_name": settings.MODEL_NAME,
+                        "inputs": inputs,
+                        "request_id": params.request_id,
+                    }
+
+                # The iterator yields a TUPLE of (result, error). We must unpack it.
+                async for result, error in self.client.stream_infer(inputs_iterator=input_iterator()):
+                    # Check if the error object in the tuple is not None.
+                    if error:
+                        error_message = f"Inference stream error for request {params.request_id}: {error}"
+                        logger.error(error_message)
+                        yield f"Error: {error_message}"
+                        break
+                    
+                    # If there's no error, 'result' is the InferResult object.
+                    output = result.as_numpy('text_output')
+                    if output is not None:
+                        yield output[0].decode('utf-8')
+            
+            except InferenceServerException as e:
+                # This handles errors in setting up the stream itself.
+                error_message = f"An exception occurred during stream generation for request {params.request_id}: {e}"
+                logger.error(error_message, exc_info=True)
+                yield f"Error: Could not process the request. {e}"
+
+            # --- END OF DEFINITIVE FIX ---
         except Exception as e:
             error_message = f"An exception occurred during stream generation for request {params.request_id}: {e}"
-            logger.error(error_message)
+            logger.error(error_message, exc_info=True) # Log the full traceback
             yield f"Error: Could not process the request. {error_message}"
 
     def _create_input(self, name: str, data: list, dtype: str):
         """Helper function to create a Triton InferInput object."""
-        np_dtype = np.object_ if dtype == "BYTES" else np.dtype(dtype.lower())
+        
+        # --- START OF FIX ---
+        # Translate Triton-style dtype strings to NumPy-style dtype strings.
+        # NumPy expects 'float32', not 'fp32'.
+        numpy_dtype_str = dtype.lower().replace('fp', 'float')
+        np_dtype = np.object_ if dtype == "BYTES" else np.dtype(numpy_dtype_str)
+        # --- END OF FIX ---
+
         infer_input = async_grpcclient.InferInput(name, [1, 1], dtype)
         infer_input.set_data_from_numpy(np.array(data, dtype=np_dtype))
         return infer_input

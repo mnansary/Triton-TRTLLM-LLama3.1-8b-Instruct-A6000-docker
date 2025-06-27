@@ -4,9 +4,10 @@ uvicorn[standard]
 gunicorn
 tritonclient[grpc,http]
 transformers
-torch 
+torch
 # Required by transformers, ensure it matches your environment
 sentencepiece
+pydantic
 pydantic-settings
 loguru
 numpy

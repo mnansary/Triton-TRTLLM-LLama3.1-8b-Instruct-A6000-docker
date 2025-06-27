@@ -346,7 +346,7 @@ LOG_LEVEL="INFO" # Options: DEBUG, INFO, WARNING, ERROR
 # -- Server Settings --
 # Host and port for the FastAPI service
 HOST="0.0.0.0"
-PORT=8000
+PORT=24434
 
 # Number of worker processes for Gunicorn.
 # Adjust based on your server's CPU cores. (2 * num_cores) + 1 is a good start.
@@ -362,7 +362,7 @@ chmod +x run.sh
 ./run.sh
 ```
 
-You should see output indicating the server has started on `http://0.0.0.0:8000`.
+You should see output indicating the server has started on `http://0.0.0.0:24434`.
 
 ### 7.6 Test the API Endpoints
 
@@ -373,7 +373,7 @@ You can now send requests from any of your applications or test with `curl`.
 This waits for the full response before returning.
 
 ```bash
-curl -X POST http://localhost:8000/generate \
+curl -X POST http://localhost:24434/generate \
 -H "Content-Type: application/json" \
 -d '{
   "prompt": "An NVIDIA A6000 GPU is a powerful tool for",
@@ -386,7 +386,7 @@ curl -X POST http://localhost:8000/generate \
 This returns tokens as soon as they are generated, ideal for interactive UIs.
 
 ```bash
-curl -N -X POST http://localhost:8000/generate_stream \
+curl -N -X POST http://localhost:24434/generate_stream \
 -H "Content-Type: application/json" \
 -d '{
   "prompt": "The future of artificial intelligence will likely be",
