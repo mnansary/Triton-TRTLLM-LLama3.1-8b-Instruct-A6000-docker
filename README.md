@@ -279,6 +279,19 @@ docker run --gpus all -d --name triton_server \
   -v ~/trtllm-data:/data \
   -v ~/trtllm-triton-repo:/models \
   nvcr.io/nvidia/tritonserver:25.05-trtllm-python-py3 \
+  tritonserver --model-repository=/models 
+```
+You can add the option of verbose logging for debug purposes: 
+
+```bash
+docker run --gpus all -d --name triton_server \
+  --shm-size=1g \
+  -p 8000:8000 \
+  -p 8001:8001 \
+  -p 8002:8002 \
+  -v ~/trtllm-data:/data \
+  -v ~/trtllm-triton-repo:/models \
+  nvcr.io/nvidia/tritonserver:25.05-trtllm-python-py3 \
   tritonserver --model-repository=/models --log-verbose=1
 ```
 
@@ -331,26 +344,28 @@ the ```.env``` should look like this
 # --- LLM Service Environment Variables ---
 # Use this file to override default settings from config.py
 
-# -- Triton Settings --
+# --- Triton and Model Settings ---
 TRITON_URL="localhost:8001"
 MODEL_NAME="ensemble"
-DEFAULT_MODEL_ID="meta-llama/Meta-Llama-3.1-8B-Instruct"
 
-# -- Generation Parameters --
-# The default maximum number of tokens for a request.
-MAX_TOKENS=32768
-
-# -- Logging Settings --
-LOG_LEVEL="INFO" # Options: DEBUG, INFO, WARNING, ERROR
-
-# -- Server Settings --
-# Host and port for the FastAPI service
+# --- Server Settings ---
 HOST="0.0.0.0"
 PORT=24434
-
-# Number of worker processes for Gunicorn.
-# Adjust based on your server's CPU cores. (2 * num_cores) + 1 is a good start.
+# For a machine with 16 CPU cores, a value of 8 might provide better performance.
 WORKERS=4
+
+# --- Logging Settings ---
+LOG_LEVEL="INFO" # Options: DEBUG, INFO, WARNING, ERROR
+
+# ===================================================================
+# --- System-Wide Overrides for Generation Defaults ---
+# Any value set here will override the default from config.py.
+# This is useful for setting a different "house style" for your API.
+# ===================================================================
+DEFAULT_MAX_TOKENS=4096      # Setting a higher default for this environment.
+DEFAULT_TEMPERATURE=0.7      # Making the model slightly more creative by default here.
+DEFAULT_TOP_P=0.95           # A slightly larger sampling pool.
+DEFAULT_REPETITION_PENALTY=1.15
 ```
 
 ### 7.5 Run the API Server
@@ -394,7 +409,55 @@ curl -N -X POST http://localhost:24434/generate_stream \
   "max_tokens": 100
 }'
 ```
+---
 
+### Available Generation Parameters for Your Triton Service
+
+This table summarizes the key parameters you can expose through your service. These are defined in the `input` section of your `ensemble/config.pbtxt` and can be passed with each inference request to control the model's output.
+
+#### Core Generation Control
+
+| Parameter | Data Type | Description | Default/Example |
+| :--- | :--- | :--- | :--- |
+| `prompt` | String | The initial text prompt to start the generation. (Mapped to `text_input`). | **Required.** |
+| `max_tokens` | Integer | The maximum number of new tokens to generate in the response. | **Required.** e.g., `1024` |
+| `min_tokens` | Integer | The minimum number of new tokens to generate. The model will not stop before this count. | e.g., `32` |
+
+#### Sampling & Creativity Control
+
+| Parameter | Data Type | Description | Default/Example |
+| :--- | :--- | :--- | :--- |
+| `temperature` | Float | Controls randomness. Lower values (e.g., `0.1`) make the output more deterministic and focused. Higher values (e.g., `0.9`) increase creativity and diversity. A value of `0.0` is equivalent to greedy decoding. | e.g., `0.7` |
+| `top_k` | Integer | Restricts the sampling pool to the `k` most likely next tokens. A value of `1` is greedy decoding. A value of `0` disables Top-K sampling. | e.g., `50` |
+| `top_p` | Float | Restricts the sampling pool to a cumulative probability mass. For `top_p=0.9`, the model considers only the most likely tokens whose probabilities add up to 95%. A value of `1.0` disables Top-P sampling. | e.g., `0.95` |
+| `seed` | Unsigned 64-bit Int | A seed for the random number generator to ensure reproducible outputs. If you use the same prompt and seed, you will get the exact same result every time. | e.g., `42` |
+
+**Note:** The model typically uses either Top-K or Top-P sampling, whichever is more restrictive. It's common to set one to its disabled state (like `top_k=0`) while tuning the other.
+
+#### Content & Penalty Control
+
+| Parameter | Data Type | Description | Default/Example |
+| :--- | :--- | :--- | :--- |
+| `repetition_penalty` | Float | Penalizes tokens that have already appeared in the text (prompt + generation). A value > 1.0 discourages repetition; a value < 1.0 encourages it. `1.0` means no penalty. | e.g., `1.2` |
+| `presence_penalty` | Float | Similar to repetition penalty, but applies a flat penalty to any token that has appeared at least once, regardless of frequency. Positive values discourage repeating tokens. | e.g., `0.0` |
+| `frequency_penalty` | Float | Applies a penalty to tokens that increases based on how many times they have already appeared. Positive values discourage repeating tokens more strongly the more they are repeated. | e.g., `0.0` |
+| `length_penalty` | Float | Adjusts the model's preference for longer or shorter sequences, primarily used with beam search. A value > 1.0 encourages longer sequences; a value < 1.0 encourages shorter ones. | e.g., `1.0` |
+
+#### Stopping & Filtering
+
+| Parameter | Data Type | Description | Default/Example |
+| :--- | :--- | :--- | :--- |
+| `stop_words` | List of Strings | A list of words or phrases that will immediately stop the generation process if produced. | `["\nUser:", "<|eot_id|>"]` |
+| `bad_words` | List of Strings | A list of words that are forbidden from being generated. The model will never output these tokens. | e.g., `["nsfw_word"]` |
+| `end_id` | Integer | The token ID that signals the end of a sequence. For Llama 3, this is `128009` (`<|eot_id|>`). This is usually handled automatically but can be overridden. | e.g., `128009` |
+
+#### Advanced Control
+
+| Parameter | Data Type | Description | Default/Example |
+| :--- | :--- | :--- | :--- |
+| `beam_width` | Integer | The number of beams to use for beam search. A value of `1` (the default) effectively uses standard sampling. A value > 1 enables beam search, which can produce higher-quality results at the cost of performance. | e.g., `1` |
+| `num_return_sequences`| Integer | The number of alternative sequences to generate. Requires `beam_width` to be at least this large. | e.g., `1` |
+| `return_log_probs` | Boolean | If `true`, returns the log probabilities of the generated tokens. Useful for analysis but adds computational overhead. | `false` |
 ---
 # Turning it into a managed, reliable background service.
 
