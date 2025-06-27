@@ -396,6 +396,181 @@ curl -N -X POST http://localhost:24434/generate_stream \
 ```
 
 ---
+# Turning it into a managed, reliable background service.
+
+The best and most standard way to do this on a modern Linux system (like Ubuntu, which you appear to be using) is with `systemd`. This is the system and service manager that controls almost everything on your machine.
+
+Creating a `systemd` service will give you:
+-   **Automatic Startup:** The service will start automatically when your machine boots.
+-   **Automatic Restart:** If your application crashes for any reason, `systemd` will automatically restart it.
+-   **Centralized Logging:** All output from your script is automatically captured and managed by the system's logger (`journalctl`).
+-   **Simple Commands:** Easy, standardized commands like `start`, `stop`, `restart`, and `status`.
+
+Here is the complete, step-by-step guide.
+
+---
+
+### Step 1: Create the `systemd` Service File
+
+This file is a simple text file that tells `systemd` everything it needs to know about your service.
+
+First, you need to create this file in the system-wide services directory. You will need `sudo` privileges.
+
+```bash
+# Create and open the service file with the nano text editor
+sudo nano /etc/systemd/system/llm_service.service
+```
+
+Now, **copy the following content and paste it into the `nano` editor**.
+
+**Crucially, you must replace the placeholders `<your_username>` and `<full_path_to_your_project>` with your actual values.**
+
+```ini
+[Unit]
+Description=LLM Inference API Service
+After=network.target docker.service
+
+[Service]
+# --- IMPORTANT: Replace with your actual user and group ---
+User=<your_username>
+Group=<your_username>
+
+# --- IMPORTANT: Replace with the full path to your project directory ---
+WorkingDirectory=<full_path_to_your_project>
+
+# --- IMPORTANT: Replace with your actual user ---
+# This sets the PATH so systemd can find the correct python/gunicorn
+Environment="PATH=/home/<your_username>/anaconda3/envs/llm_service/bin:/usr/bin:/bin"
+
+# This command uses the full path to the script for reliability
+ExecStart=/bin/bash <full_path_to_your_project>/run.sh
+
+# Restart the service if it fails
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+#### How to Find Your Placeholders:
+
+1.  **`<your_username>`**: Your username is `ansary`.
+2.  **`<full_path_to_your_project>`**:
+    -   Navigate to your project directory in your terminal: `cd ~/services/Triton-TRTLLM-LLama3.1-8b-Instruct-A6000-docker`
+    -   Run the command `pwd`. It will print the full path, for example: `/home/ansary/services/Triton-TRTLLM-LLama3.1-8b-Instruct-A6000-docker`.
+    -   Use this full path in the service file.
+
+#### Your Final `llm_service.service` File Should Look Like This:
+
+```ini
+[Unit]
+Description=LLM Inference API Service
+# Wait for the network and docker to be up before starting
+After=network.target docker.service
+
+[Service]
+# Run the service as your user to handle permissions correctly
+User=ansary
+Group=ansary
+
+# Start the service from your project's root directory
+WorkingDirectory=/home/ansary/services/Triton-TRTLLM-LLama3.1-8b-Instruct-A6000-docker
+
+# Set the PATH environment variable so systemd can find the conda environment's gunicorn
+Environment="PATH=/home/ansary/anaconda3/envs/llm_service/bin:/usr/bin:/bin"
+
+# The command to execute, using absolute paths
+ExecStart=/bin/bash /home/ansary/services/Triton-TRTLLM-LLama3.1-8b-Instruct-A6000-docker/run.sh
+
+# Automatically restart the service if it crashes
+Restart=on-failure
+RestartSec=5
+
+[Install]
+# Enable the service to start on boot
+WantedBy=multi-user.target
+```
+
+Once you have pasted and edited the content, save the file and exit `nano` by pressing `Ctrl+X`, then `Y`, then `Enter`.
+
+---
+
+### Step 2: Install and Manage the Service
+
+Now you will use the `systemctl` command to control your new service.
+
+**1. Reload the `systemd` daemon:**
+This tells `systemd` to read your new service file.
+```bash
+sudo systemctl daemon-reload
+```
+
+**2. Enable the service:**
+This registers your service to start automatically on system boot.
+```bash
+sudo systemctl enable llm_service
+```
+
+**3. Start the service:**
+This starts the service right now. You will no longer see the output in your terminal because it's running in the background.
+```bash
+sudo systemctl start llm_service
+```
+
+### Step 3: Controlling Your Service (The Commands You Wanted)
+
+You now have a powerful set of commands to manage your application.
+
+#### Check the Status
+This is the most important command. It will tell you if the service is `active (running)` or if it has failed.
+```bash
+sudo systemctl status llm_service
+```
+A healthy output will look like this:
+```
+● llm_service.service - LLM Inference API Service
+     Loaded: loaded (/etc/systemd/system/llm_service.service; enabled; vendor preset: enabled)
+     Active: active (running) since Thu 2025-06-27 06:30:00 +06; 1min 10s ago
+   Main PID: 1450123 (bash)
+      Tasks: 6 (limit: 9389)
+     Memory: 500.0M
+        CPU: 10.5s
+     CGroup: /system.slice/llm_service.service
+             ...
+```
+
+#### Stop the Service (The "Kill" Command)
+This will gracefully stop your application.
+```bash
+sudo systemctl stop llm_service
+```
+
+#### Restart the Service
+Use this after you make any changes to your Python code. It's a convenient one-step stop and start.
+```bash
+sudo systemctl restart llm_service
+```
+
+### Step 4: Viewing Logs
+
+Since the service is running in the background, you no longer see its logs in your terminal. `systemd` automatically captures them for you via `journalctl`.
+
+#### View All Logs for Your Service
+```bash
+sudo journalctl -u llm_service.service
+```
+
+#### View Live, Tailing Logs (Most Useful!)
+This is the equivalent of `tail -f`. It will show you a live stream of logs as they happen, which is perfect for debugging.
+```bash
+sudo journalctl -u llm_service.service -f
+```
+
+Press `Ctrl+C` to exit the live view.
+
+You have now successfully converted your script into a robust, manageable, production-style system service.
+---
 
 ## Appendix: Parameter Explanations
 
