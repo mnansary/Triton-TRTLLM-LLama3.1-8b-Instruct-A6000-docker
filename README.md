@@ -1404,6 +1404,14 @@ if __name__ == "__main__":
     asyncio.run(stream_response())
 ```
 
+You can find this codes that displays : 
+1. sync non stream: ```tests/non_stream_req.py```
+2. async stream: ```test/stream_req.py```
+3. concurrent_batch_stream: ```tests/concurrent_batch_stream.py```
+> no 3- It will show jumbled data because all the requests are being processed with streaming concurrently 
+
+
+
 ###  3.2. JavaScript (Browser / Node.js): Using the `fetch` API (NOT TESTED:  BUT YOU WILL GET THE IDEA RIGHT!!)
 
 For any web front-end or Node.js backend, you can use the built-in `fetch` API.
