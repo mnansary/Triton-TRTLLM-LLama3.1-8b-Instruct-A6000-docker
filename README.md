@@ -21,7 +21,7 @@ The final result is a robust, streaming-capable API service that can handle mult
         -   [2.2 Log in via Docker](#22-log-in-via-docker)
     -   [**Step 3: Download Triton Server Image**](#step-3-download-triton-server-image)
     -   [**Step 4: Download the Llama 3.1 Model**](#step-4-download-the-llama-31-model)
-    -   [**Step 5: Build the TensorRT-LLM Engine**](#step-5-build-the-tensorrt-llm-engine)
+    -   [**Step 5: Build the TensorRT-LLM Engine**](#step-5-build-the-tensorrt-llm-engine)  
         -   [5.1 Convert Hugging Face Model to TensorRT-LLM Checkpoint](#51-convert-hugging-face-model-to-tensorrt-llm-checkpoint)
         -   [5.2 Build the Optimized Engine from the Checkpoint](#52-build-the-optimized-engine-from-the-checkpoint)
     -   [**Step 6: Prepare and Launch Triton Server**](#step-6-prepare-and-launch-triton-server)
@@ -51,6 +51,11 @@ The final result is a robust, streaming-capable API service that can handle mult
 
 - [**Insights**](#insights) 
     - [Unit Testing the API: Ensuring Reliability and Understanding Behavior](#unit-testing-the-api-ensuring-reliability-and-understanding-behavior)
+
+
+> Note: A6000 and L40s, step 5.1,5.2 and 6.1 are different but you can follow along . You will find links for redirection and getting back.
+
+---
 
 # Introduction
 ## From Prototype to Production
@@ -116,7 +121,7 @@ Instead of one tool that does everything reasonably well, we use two specialized
 The F1 team does several things:
 *   **Strips Out Unnecessary Parts:** Removes parts of the model code only used for training, not inference.
 *   **Fuses Operations (Kernel Fusion):** Instead of telling the GPU "do task A, then task B, then task C," it fuses them into a single, highly optimized instruction: "do task ABC." This dramatically reduces overhead.
-*   **Uses Lighter Materials (Quantization):** It converts model weights from heavy `FP16` numbers into lighter `INT8` numbers. This means the model takes up less VRAM and calculations are much faster on the GPU's specialized INT8 Tensor Cores. (For more, see [Quantization Explained](./03_quantization_explained.md)).
+*   **Uses Lighter Materials (Quantization):** It converts model weights from heavy `FP16` numbers into lighter `INT8` numbers. This means the model takes up less VRAM and calculations are much faster on the GPU's specialized INT8 Tensor Cores. 
 *   **Optimizes for the Track (Hardware-Specific Compilation):** The final engine is compiled *specifically* for the architecture of your A6000 GPU, taking advantage of its unique features. It's not a general-purpose engine anymore; it's a bespoke racing engine.
 
 The output of `trtllm-build` is a `.engine` file. This is no longer a flexible PyTorch model; it's a rigid, black-box, speed-optimized inference engine.
@@ -129,7 +134,7 @@ A single car on a track is fast, but an airport needs to handle massive, concurr
 
 *   **Load Models (`.engine` files):** It loads our TensorRT-LLM engine into GPU memory, ready to receive requests.
 *   **Manage Concurrent Requests:** It's built from the ground up to accept thousands of simultaneous connections without breaking a sweat.
-*   **Dynamic Batching:** This is its most critical feature. Instead of waiting for a "batch" of 4 requests to arrive before starting (static batching), Triton can dynamically group requests that are in-flight, maximizing GPU utilization. (For more, see [Concurrency & Batching](./05_concurrency_and_batching.md)).
+*   **Dynamic Batching:** This is its most critical feature. Instead of waiting for a "batch" of 4 requests to arrive before starting (static batching), Triton can dynamically group requests that are in-flight, maximizing GPU utilization. 
 *   **Orchestrate Pipelines (Ensembles):** A raw request is just text. The engine needs token IDs. Triton manages the entire pipeline, as defined in our model repository.
 
 Here is what Triton's internal workflow (our "ensemble" model) looks like:
@@ -612,7 +617,7 @@ docker login nvcr.io
 
 The command will prompt you for a `Username` and a `Password`:
 
--   **Username:** Enter the literal string `**$oauthtoken**`
+-   **Username:** Enter the literal string `$oauthtoken`
 -   **Password:** Paste the **NGC API Key** you just generated. (Note: The password will be invisible as you type/paste it).
 
 You should see a `Login Succeeded` message.
@@ -652,11 +657,7 @@ huggingface-cli download meta-llama/Meta-Llama-3.1-8B-Instruct --local-dir ~/trt
 
 ## Step 5: Build the TensorRT-LLM Engine
 
-This is the most critical step, where we convert the Hugging Face model into a highly optimized engine for inference. These commands are run inside the Triton container.
-
-### 5.1 Convert Hugging Face Model to TensorRT-LLM Checkpoint
-
-First, launch an interactive container session with the required directories mounted.
+**Option-1**: First, launch an interactive container session with the required directories mounted.
 
 ```bash
 # Start an interactive container
@@ -678,13 +679,48 @@ mkdir -p /workspace && cd /workspace
 git clone https://github.com/NVIDIA/TensorRT-LLM.git
 cd TensorRT-LLM
 git checkout v0.19.0
+```
 
+**Option-2** : Alternatively what you can do is git clone TensorRT-LLM repo (Faster) in your host machine 
+
+```bash
+# install git lfs
+sudo apt-get install git-lfs
+# initialize
+git lfs install
+
+mkdir ~/trtllm-repo
+cd trtllm-repo/
+git clone https://github.com/NVIDIA/TensorRT-LLM.git
+cd TensorRT-LLM
+git checkout v0.19.0
+```
+
+and now you can mount this dir as well 
+
+```bash
+docker run --gpus all -it --rm   -v ~/trtllm-data:/data   -v ~/trtllm-triton-repo:/triton_repo   -v ~/trtllm-repo:/workspace  nvcr.io/nvidia/tritonserver:25.05-trtllm-python-py3
+
+```
+
+
+The next steps are same in both cases from here:
+
+```bash
 # Inside container: Install dependencies
 pip install -r requirements.txt
-
 # Inside container: Create a directory for the converted checkpoint
 mkdir -p /data/llama-3.1-8b-tllm-ckpt
+```
 
+**Important**: here you will divert if you have L40s instead of A6000. You can follow step 5.1,5.2 and 6.1 from [**L40s Installation**](#l40s-installation). If you have A6000 continue.
+
+
+#### **This is the most critical step, where we convert the Hugging Face model into a highly optimized engine for inference. These commands are run inside the Triton container.**
+
+### 5.1 Convert Hugging Face Model to TensorRT-LLM Checkpoint
+### FOR A6000 - FP8 is not Available
+```bash
 # Inside container: Run the conversion script (INT8 weight-only quantization)
 python examples/llama/convert_checkpoint.py \
     --model_dir /data/llama-3.1-8b-hf \
@@ -735,7 +771,7 @@ trtllm-build \
 | | `--multiple_profiles` | `enable` | Creates multiple optimization profiles, which can improve performance for inputs of varying lengths. |
 
 
-Once the build is complete, you can leave the interactive container:
+Once the build is complete, you can leave the interactive container: The reason to leave the container is to keep it clean from the heavy TensorRT-LLM repo. 
 ```bash
 # Inside container:
 exit
@@ -845,7 +881,9 @@ This table explains the parameters for the final `tensorrt_llm/config.pbtxt` con
 | **`engine_dir`** | `/data/llama-3.1-8b-96k-engine` | **Logic:** **This is the correct path.** It is the absolute path inside the container to the directory containing your compiled `rank0.engine`. It must match the `--output_dir` from the `trtllm-build` step. |
 | **`exclude_input_in_output`**| `True` | **Logic:** A standard setting for chat/instruction models. It prevents the server from echoing the user's (potentially very long) prompt, saving bandwidth. |
 | **`encoder_input_features_data_type`**| `TYPE_FP16` | **Logic:** This specifies the data type for certain inputs. Since our model's `--dtype` was `float16`, this ensures compatibility. |
+| **`logits_datatype`** | `TYPE_FP32` | **Logic:** Ensures numerical stability and consistency. It matches the data type for logits specified in the other configuration files, ensuring data flows correctly through the pipeline. |
 | **Others** | `triton_backend:tensorrtllm`, `triton_max_batch_size:4`, etc. | **Logic:** These ensure consistency with the other configuration files and the engine build itself. They are mandatory and must match. |
+
 
 #### tensorrt_llm_bls (bussiness logic) 
 
@@ -1162,7 +1200,7 @@ WorkingDirectory=<full_path_to_your_project>
 
 # --- IMPORTANT: Replace with your actual user ---
 # This sets the PATH so systemd can find the correct python/gunicorn
-Environment="PATH=/home/<your_username>/anaconda3/envs/llm_service/bin:/usr/bin:/bin"
+Environment="PATH=/home/<your_username>/<anaconda3 or miniconda3>/envs/llm_service/bin:/usr/bin:/bin"
 
 # This command uses the full path to the script for reliability
 ExecStart=/bin/bash <full_path_to_your_project>/run.sh
@@ -1179,9 +1217,10 @@ WantedBy=multi-user.target
 
 1.  **`<your_username>`**: Your username is `ansary`.
 2.  **`<full_path_to_your_project>`**:
-    -   Navigate to your project directory in your terminal: `cd ~/services/Triton-TRTLLM-LLama3.1-8b-Instruct-A6000-docker`
-    -   Run the command `pwd`. It will print the full path, for example: `/home/ansary/services/Triton-TRTLLM-LLama3.1-8b-Instruct-A6000-docker`.
+    -   Navigate to your project directory in your terminal: `cd ~/services/Triton-TRTLLM-LLama3.1-8b-Instruct-A6000`
+    -   Run the command `pwd`. It will print the full path, for example: `/home/ansary/services/Triton-TRTLLM-LLama3.1-8b-Instruct-A6000`.
     -   Use this full path in the service file.
+3.  **anaconda or miniconda**: whichever you installed and using
 
 #### Your Final `llm_service.service` File Should Look Like This:
 
@@ -1679,6 +1718,222 @@ These tests verify our ability to guide and constrain the model's output.
 By understanding these tested behaviors, developers can use the API with confidence, knowing exactly how to achieve the results they need, from perfectly reproducible outputs to creatively guided text.
 
 
+---
+
+---
+
+# L40s Installation 
+
+-   [5.1 Convert Hugging Face Model to TensorRT-LLM Checkpoint](#51-convert-hugging-face-model-to-tensorrt-llm-checkpoint)
+-   [5.2 Build the Optimized Engine from the Checkpoint](#52-build-the-optimized-engine-from-the-checkpoint)
+-   [6.1 Prepare the Triton Model Repository](#61-prepare-the-triton-model-repository)
+
+
+---
+
+### 5.1 (L40s) Convert Hugging Face Model to TensorRT-LLM Checkpoint 
+```bash
+# Inside container: Run the conversion script
+python examples/llama/convert_checkpoint.py \
+    --model_dir /data/llama-3.1-8b-hf \
+    --output_dir /data/llama-3.1-8b-fp8-tllm-ckpt \
+    --dtype bfloat16 \
+    --use_fp8_rowwise \
+    --fp8_kv_cache \
+    --use_meta_fp8_rowwise_recipe \
+    --calib_dataset cnn_dailymail \
+    --calib_size 32 \
+    --calib_max_seq_length 512
+```
+#### `convert_checkpoint.py` Arguments
+| Category | Argument | Your Value | Justification |
+|:---|:---|:---|:---|
+| **I/O** | `--model_dir` | `/data/llama-3.1-8b-hf` | **Required.** Points to the source Hugging Face model directory. |
+| | `--output_dir` | `/data/llama-3.1-8b-fp8-tllm-ckpt` | **Required.** Specifies the destination for the converted FP8 checkpoint. |
+| **Quantization** | `--dtype` | `bfloat16` | **Best Choice.** Sets the base precision for non-quantized layers and calculations. `bfloat16` is highly performant and numerically stable on the Ada (L40S) architecture. |
+| | `--use_fp8_rowwise`| `(Set)` | **Critical Fix.** Enables the per-token, per-channel FP8 quantization mode. This is the essential flag that correctly initializes the FP8 quantization pathway, which the meta recipe relies upon. |
+| | `--use_meta_fp8_rowwise_recipe`| `(Set)`| **Expert Choice.** Applies a validated, high-accuracy FP8 quantization strategy from Meta. It modifies the base `fp8_rowwise` behavior by intelligently skipping quantization on sensitive layers to preserve model quality. |
+| **KV Cache** | `--fp8_kv_cache` | `(Set)` | **Essential for Long Context.** Quantizes the Key-Value cache to FP8, which is critical for reducing the massive VRAM footprint of a 96k context window and improving memory bandwidth. |
+| **Calibration**| `--calib_dataset` | `cnn_dailymail` | **Required.** Provides a dataset to generate the FP8 scaling factors (`amax` values) on-the-fly, as they don't exist in the source model. This resolves the `TypeError`. |
+| | `--calib_size` | `32` | **Required.** Specifies using 32 samples from the dataset for calibration, which is sufficient to accurately estimate the scaling factors without a lengthy process. |
+| | `--calib_max_seq_length` | `512` | **Required.** Manages memory during the calibration step by setting a maximum sequence length. This does not limit the final model's context length. |
+
+### 5.2(L40s) Build the Optimized Engine from the Checkpoint
+
+This command uses the checkpoint to build the final, runnable engine, configured for our specific needs (96k input length, paged attention).
+
+```bash
+# Inside container: Build the engine
+trtllm-build \
+    --checkpoint_dir /data/llama-3.1-8b-fp8-tllm-ckpt \
+    --output_dir /data/llama-3.1-8b-96k-fp8-engine/ \
+    --max_batch_size 4 \
+    --max_input_len 96000 \
+    --max_seq_len 131072 \
+    --kv_cache_type paged \
+    --fp8_rowwise_gemm_plugin auto \
+    --gpt_attention_plugin auto \
+    --use_paged_context_fmha enable \
+    --use_fp8_context_fmha enable \
+    --multiple_profiles enable \
+    --use_fused_mlp enable
+```
+
+Of course. Here is the justification table for the final, optimized command.
+
+#### `trtllm-build` Arguments
+
+| Category | Argument | Your Value | Justification |
+|:---|:---|:---|:---|
+| **I/O** | `--checkpoint_dir` | `/data/llama-3.1-8b-fp8-tllm-ckpt` | **Required.** Points to the FP8-quantized checkpoint from the conversion step. |
+| | `--output_dir` | `/data/llama-3.1-8b-96k-fp8-engine/` | **Required.** Destination for the final, compiled FP8 engine files. |
+| **Engine Capacity**| `--max_batch_size` | `4` | **User Defined.** Sets the maximum number of concurrent requests the engine can schedule. |
+| | `--max_input_len`| `96000` | **Your Goal.** Allocates resources to handle input prompts up to 96,000 tokens long. |
+| | `--max_seq_len` | `131072` | **Your Goal.** Sets the total memory for prompt + generated tokens, providing a robust buffer for output. |
+| **Plugins (FP8)** | `--fp8_rowwise_gemm_plugin`| `auto` | **Critical.** Enables the specific GEMM plugin that corresponds to the `use_fp8_rowwise` conversion, ensuring the correct high-performance FP8 kernels are used. |
+| | `--use_fp8_context_fmha`| `enable` | **Critical.** Accelerates prompt processing by running the Fused Multi-Head Attention kernel in FP8, leveraging the L40S's hardware. |
+| **Plugins (Attention & Memory)** | `--kv_cache_type` | `paged` | **Essential.** Enables the modern, efficient paged KV cache memory manager, which is necessary for handling extremely long context lengths like 96k. |
+| | `--gpt_attention_plugin`| `auto` | **Best Practice.** Automatically selects the most optimized Fused Multi-Head Attention kernels for the generation phase. |
+| | `--use_paged_context_fmha`| `enable` | **Essential.** The companion to `kv_cache_type paged`, this enables the specific attention kernel designed to operate on the paged memory layout. |
+| **Plugins (Performance)** | `--use_fused_mlp` | `enable` | **Performance.** Fuses the GEMM and activation functions in the MLP block into a single kernel, reducing overhead and significantly improving throughput. |
+| | `--multiple_profiles`| `enable` | **Performance.** Instructs TensorRT to build and test more kernel variations, improving the engine's performance across different sequence lengths at the cost of longer build time. |
+
+
+Once the build is complete, you can leave the interactive container: The reason to leave the container is to keep it clean from the heavy TensorRT-LLM repo. 
+```bash
+# Inside container:
+exit
+```
+
+---
+
+
+### 6.1(L40s) Prepare the Triton Model Repository
+
+These steps are also performed *inside a container*.
+
+```bash
+# Start a new interactive container
+docker run --gpus all -it --rm \
+  -v ~/trtllm-data:/data \
+  -v ~/trtllm-triton-repo:/triton_repo \
+  nvcr.io/nvidia/tritonserver:25.05-trtllm-python-py3
+```
+
+Inside the new container, run these commands:
+
+```bash
+# Inside container: Clone the backend repository
+cd /workspace
+git clone -b r25.05 https://github.com/triton-inference-server/tensorrtllm_backend.git
+
+# Inside container: Copy the model template files
+cp -r /workspace/tensorrtllm_backend/all_models/inflight_batcher_llm/* /triton_repo/
+```
+
+#### ensambe
+```bash
+# Inside container: Use the fill_template.py script to configure the models
+# Note the engine_dir path now correctly points to our built engine.
+
+# ensemble/config.pbtxt
+python /workspace/tensorrtllm_backend/tools/fill_template.py -i /triton_repo/ensemble/config.pbtxt \
+    triton_max_batch_size:4,logits_datatype:TYPE_FP32
+```
+#### Configure `ensemble/config.pbtxt`
+
+This is the top-level configuration that defines the entire inference pipeline, chaining the preprocessing, business logic, core model, and postprocessing steps together.
+
+| Parameter | Your Value | Grounded Logic & Reasoning |
+| :--- | :--- | :--- |
+| **`triton_max_batch_size`** | `4` | **Why:** This value **must match** the `--max_batch_size 4` you used when you ran `trtllm-build`. This top-level ensemble config tells Triton the maximum number of requests it can group together before sending them down the pipeline. Consistency is critical for the server to function correctly. |
+| **`logits_datatype`** | `TYPE_FP32` | **Why:** This controls the precision of the model's final output scores before sampling. `TYPE_FP32` is the safest and most standard choice for preserving numerical accuracy and avoiding potential issues during the final token selection (e.g., in temperature or top-p sampling). |
+
+
+#### preprocessing
+```bash
+# preprocessing/config.pbtxt
+python /workspace/tensorrtllm_backend/tools/fill_template.py -i /triton_repo/preprocessing/config.pbtxt \
+    triton_max_batch_size:4,tokenizer_dir:/data/llama-3.1-8b-hf,preprocessing_instance_count:1
+```
+
+#### Configure `preprocessing/config.pbtxt`
+
+This model is responsible for taking the raw input string from the user and converting it into token IDs that the TensorRT-LLM engine can understand.
+
+| Parameter | Your Value | Grounded Logic & Reasoning |
+| :--- | :--- | :--- |
+| **`triton_max_batch_size`** | `4` | **Why:** This must be consistent across all configs. It matches the `max_batch_size` used for the ensemble config and the `trtllm-build` command. |
+| **`tokenizer_dir`** | `/data/llama-3.1-8b-hf` | **Why:** This is the absolute path *inside the container* to the directory where the Hugging Face tokenizer files (`tokenizer.model`, `tokenizer.json`, etc.) are located. The Python backend for this step needs this exact path to load the vocabulary and correctly convert input text into token IDs. |
+| **`preprocessing_instance_count`** | `1` | **Why:** This sets how many parallel CPU processes to use for tokenization. `1` is a safe, standard default. You could increase this later if performance monitoring reveals that text tokenization is a CPU bottleneck for your service under heavy load. |
+
+
+#### postprocessing
+
+```bash
+# postprocessing/config.pbtxt
+python /workspace/tensorrtllm_backend/tools/fill_template.py -i /triton_repo/postprocessing/config.pbtxt \
+    triton_max_batch_size:4,tokenizer_dir:/data/llama-3.1-8b-hf,postprocessing_instance_count:1
+```
+
+#### Configure `postprocessing/config.pbtxt`
+
+This model does the reverse of preprocessing: it takes the output token IDs generated by the engine and converts them back into human-readable text.
+
+| Parameter | Your Value | Grounded Logic & Reasoning |
+| :--- | :--- | :--- |
+| **`triton_max_batch_size`** | `4` | **Why:** This must be consistent across all configs and match the batch size you built the engine with (`4`). |
+| **`tokenizer_dir`** | `/data/llama-3.1-8b-hf` | **Why:** This is the absolute path to the tokenizer files. The Python backend for this step needs this path to correctly map the output token IDs back into words. |
+| **`postprocessing_instance_count`** | `1` | **Why:** This sets how many parallel CPU processes to use for detokenization. `1` is a safe, standard default. It can be increased later if postprocessing becomes a bottleneck. |
+
+#### tensorrt_llm
+
+```bash
+# tensorrt_llm/config.pbtxt (Corrected)
+python /workspace/tensorrtllm_backend/tools/fill_template.py -i /triton_repo/tensorrt_llm/config.pbtxt \
+    triton_backend:tensorrtllm,triton_max_batch_size:4,decoupled_mode:True,max_beam_width:1,engine_dir:/data/llama-3.1-8b-96k-fp8-engine,batching_strategy:inflight_fused_batching,max_tokens_in_paged_kv_cache:524288,enable_chunked_context:True,exclude_input_in_output:True,logits_datatype:TYPE_FP32,encoder_input_features_data_type:TYPE_FP16
+```
+#### configure `tensorrt_llm/config.pbtxt` Arguments : THE MOST IMPORTANT ONE
+
+This table explains the parameters for the final `tensorrt_llm/config.pbtxt` configuration.
+
+| Parameter | Your Value | Grounded Logic & Reasoning |
+|:---|:---|:---|
+| **`engine_dir`** | `/data/llama-3.1-8b-96k-fp8-engine` | **Logic:** This is the absolute path inside the container to your compiled FP8 engine. It **must** match the `--output_dir` from the `trtllm-build` step. |
+| **`batching_strategy`** | `inflight_fused_batching` | **Logic:** Enables the core feature for high throughput: in-flight batching. It dynamically manages and batches requests to maximize GPU utilization, which is essential for serving multiple users. |
+| **`decoupled_mode`** | `True` | **Logic:** Enables streaming output, where tokens are sent back as they are generated. This is a requirement for any interactive chat or real-time application. |
+| **`max_tokens_in_paged_kv_cache`**| `524288` | **Logic:** **Critical for stability.** This defines the total KV cache pool size in tokens (`max_batch_size` * `max_seq_len`). This value is large enough to handle a full batch of worst-case, max-length requests, preventing memory exhaustion. |
+| **`enable_chunked_context`** | `True` | **Logic:** **Essential for long context.** This processes the huge 96k input prompt in smaller chunks, which prevents a single massive memory allocation that could cause out-of-memory errors and improves stability. |
+| **`exclude_input_in_output`**| `True` | **Logic:** A standard setting for chat models. It prevents the server from echoing the user's (potentially very long) prompt, saving bandwidth and compute. |
+| **`encoder_input_features_data_type`**| `TYPE_FP16` | **Logic:** This specifies the data type for certain inputs. Since our model's `--dtype` was `float16`, this ensures compatibility. |
+| **`logits_datatype`** | `TYPE_FP32` | **Logic:** Ensures numerical stability and consistency. It matches the data type for logits specified in the other configuration files, ensuring data flows correctly through the pipeline. |
+| **Others** | `triton_backend:tensorrtllm`, `triton_max_batch_size:4`, etc. | **Logic:** These ensure consistency with the other configuration files and the engine build itself. They are mandatory and must match across the entire pipeline. |
+
+#### tensorrt_llm_bls (bussiness logic) 
+
+```bash
+# tensorrt_llm_bls/config.pbtxt
+python /workspace/tensorrtllm_backend/tools/fill_template.py -i /triton_repo/tensorrt_llm_bls/config.pbtxt \
+    triton_max_batch_size:4,decoupled_mode:True,bls_instance_count:1,accumulate_tokens:False,logits_datatype:TYPE_FP32
+```
+
+#### Configure `tensorrt_llm_bls/config.pbtxt`
+
+This model implements the Business Logic Scripting (BLS) for the pipeline. It acts as the "manager" that orchestrates the flow of data to and from the core `tensorrt_llm` model, especially for complex patterns like in-flight batching and streaming.
+
+| Parameter | Your Value | Grounded Logic & Detailed Reasoning |
+|:---|:---|:---|
+| **`triton_max_batch_size`** | `4` | **Logic:** Ensures consistency across the entire pipeline. It must match the value used in `trtllm-build` and all other `config.pbtxt` files. |
+| **`decoupled_mode`** | `True` | **Logic:** **Crucial for streaming.** This must match the `decoupled_mode:True` setting from the `tensorrt_llm/config.pbtxt`. It tells this "manager" component to operate in an asynchronous, non-blocking way, which is required to handle the streaming of tokens from the backend engine. |
+| **`bls_instance_count`** | `1` | **Logic:** This defines how many parallel CPU processes run this business logic script. `1` is a safe and standard default. This can be tuned later if this specific step is identified as a performance bottleneck. |
+| **`accumulate_tokens`** | `False` | **Logic:** **Also crucial for streaming.** When set to `False`, this component does *not* wait for the entire sequence to be generated. It passes tokens through to the `postprocessing` step as soon as they arrive from the engine. If this were `True`, it would buffer the entire response and destroy the streaming effect. |
+| **`logits_datatype`** | `TYPE_FP32` | **Logic:** Ensures numerical stability and consistency. It matches the data type for logits specified in the other configuration files, ensuring data flows correctly through the pipeline. |
+
+
+
+Once done, exit the container: `exit`.
+
+now got back to [**step 6.2**](#62-correct-host-file-permissions)
 ---
 
 # TODO 

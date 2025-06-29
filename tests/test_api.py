@@ -15,7 +15,7 @@ async def async_client():
     A pytest fixture that creates and yields a fresh httpx.AsyncClient for each test.
     This ensures test isolation and resolves event loop scope conflicts.
     """
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with httpx.AsyncClient(timeout=300.0) as client:
         yield client
 
 # --- Helper Function ---
