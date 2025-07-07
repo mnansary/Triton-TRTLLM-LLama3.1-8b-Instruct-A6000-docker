@@ -53,6 +53,9 @@ The final result is a robust, streaming-capable API service that can handle mult
     - [Unit Testing the API: Ensuring Reliability and Understanding Behavior](#unit-testing-the-api-ensuring-reliability-and-understanding-behavior)
 
 
+- [**Improvements**](#improvements)
+    - [Adding Bangla Stream Support](#adding-bangla-stream-support)
+
 > Note: A6000 and L40s, step 5.1,5.2 and 6.1 are different but you can follow along . You will find links for redirection and getting back.
 
 ---
@@ -1934,6 +1937,22 @@ This model implements the Business Logic Scripting (BLS) for the pipeline. It ac
 Once done, exit the container: `exit`.
 
 now got back to [**step 6.2**](#62-correct-host-file-permissions)
+---
+
+# Improvements
+
+## Adding bangla stream support
+
+**WARNING**: After adding bangla stream support non-stream behaviour might show warning or errors even. 
+
+**SHORT ANSWER**: Just replace the contents of **trtllm-triton-repo** from this repository in your **trtllm-triton-repo** folder and you are good to go. 
+
+* It changes how postprocessing is done. 
+* This solution provided in the repo is highly specific for llama tokenizers. 
+* Essentially we changed how decoding is done on tokens in postprocessing after receiving them. 
+* Instead of directly sending them one by one we create thread locked controlled buffer which looks for " " space token or the special token that signifies space and uses it to send chunk one word by word rather than one unicode or letter or token. 
+* Might have some drawbacks but useful for Bangla and multi-token unicode language support. 
+
 ---
 
 # TODO 
