@@ -1945,7 +1945,7 @@ now got back to [**step 6.2**](#62-correct-host-file-permissions)
 
 **WARNING**: After adding bangla stream support non-stream behaviour might show warning or errors even. 
 
-**SHORT ANSWER**: Just replace the contents of **trtllm-triton-repo** from this repository in your **trtllm-triton-repo** folder and you are good to go. 
+**SHORT ANSWER**: Just replace the contents of **trtllm-triton-repo/postprocessing/1/model.py** from this repository's in your **bangla_support/model.py** folder and you are good to go. 
 
 * It changes how postprocessing is done. 
 * This solution provided in the repo is highly specific for llama tokenizers. 
