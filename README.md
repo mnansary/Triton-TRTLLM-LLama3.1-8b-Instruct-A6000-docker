@@ -756,11 +756,14 @@ trtllm-build \
     --max_batch_size 4 \
     --max_input_len 96000 \
     --max_seq_len 131072 \
+    --max_num_tokens 131072\
     --use_paged_context_fmha enable \
     --multiple_profiles enable
 ```
 
 #### `trtllm-build` Arguments
+
+**Keep the max_num_tokens=131072 for using the model with full capacity this is crucial**
 
 | Category | Argument | Your Value | Justification |
 |:---|:---|:---|:---|
@@ -1773,6 +1776,7 @@ trtllm-build \
     --max_batch_size 4 \
     --max_input_len 96000 \
     --max_seq_len 131072 \
+    --max_num_tokens 131072\
     --kv_cache_type paged \
     --fp8_rowwise_gemm_plugin auto \
     --gpt_attention_plugin auto \
@@ -1785,6 +1789,8 @@ trtllm-build \
 Of course. Here is the justification table for the final, optimized command.
 
 #### `trtllm-build` Arguments
+
+**Keep the max_num_tokens=131072 for using the model with full capacity this is crucial**
 
 | Category | Argument | Your Value | Justification |
 |:---|:---|:---|:---|
@@ -1894,7 +1900,7 @@ This model does the reverse of preprocessing: it takes the output token IDs gene
 ```bash
 # tensorrt_llm/config.pbtxt (Corrected)
 python /workspace/tensorrtllm_backend/tools/fill_template.py -i /triton_repo/tensorrt_llm/config.pbtxt \
-    triton_backend:tensorrtllm,triton_max_batch_size:4,decoupled_mode:True,max_beam_width:1,engine_dir:/data/llama-3.1-8b-96k-fp8-engine,batching_strategy:inflight_fused_batching,max_tokens_in_paged_kv_cache:524288,enable_chunked_context:True,exclude_input_in_output:True,logits_datatype:TYPE_FP32,encoder_input_features_data_type:TYPE_FP16
+    triton_backend:tensorrtllm,triton_max_batch_size:4,decoupled_mode:True,max_beam_width:1,engine_dir:/data/llama-3.1-8b-96k-fp8-engine,batching_strategy:inflight_fused_batching,max_tokens_in_paged_kv_cache:131072,enable_chunked_context:True,exclude_input_in_output:True,logits_datatype:TYPE_FP32,encoder_input_features_data_type:TYPE_FP16
 ```
 #### configure `tensorrt_llm/config.pbtxt` Arguments : THE MOST IMPORTANT ONE
 
@@ -1905,7 +1911,7 @@ This table explains the parameters for the final `tensorrt_llm/config.pbtxt` con
 | **`engine_dir`** | `/data/llama-3.1-8b-96k-fp8-engine` | **Logic:** This is the absolute path inside the container to your compiled FP8 engine. It **must** match the `--output_dir` from the `trtllm-build` step. |
 | **`batching_strategy`** | `inflight_fused_batching` | **Logic:** Enables the core feature for high throughput: in-flight batching. It dynamically manages and batches requests to maximize GPU utilization, which is essential for serving multiple users. |
 | **`decoupled_mode`** | `True` | **Logic:** Enables streaming output, where tokens are sent back as they are generated. This is a requirement for any interactive chat or real-time application. |
-| **`max_tokens_in_paged_kv_cache`**| `524288` | **Logic:** **Critical for stability.** This defines the total KV cache pool size in tokens (`max_batch_size` * `max_seq_len`). This value is large enough to handle a full batch of worst-case, max-length requests, preventing memory exhaustion. |
+| **`max_tokens_in_paged_kv_cache`**| `131072` | **Logic:** **Critical for stability.** This defines the total KV cache pool size in tokens (`max_batch_size` * `max_seq_len`). This value is large enough to handle a single full batch of worst-case, max-length requests, preventing memory exhaustion. |
 | **`enable_chunked_context`** | `True` | **Logic:** **Essential for long context.** This processes the huge 96k input prompt in smaller chunks, which prevents a single massive memory allocation that could cause out-of-memory errors and improves stability. |
 | **`exclude_input_in_output`**| `True` | **Logic:** A standard setting for chat models. It prevents the server from echoing the user's (potentially very long) prompt, saving bandwidth and compute. |
 | **`encoder_input_features_data_type`**| `TYPE_FP16` | **Logic:** This specifies the data type for certain inputs. Since our model's `--dtype` was `float16`, this ensures compatibility. |
